@@ -258,27 +258,64 @@ def generate_subtraction_with_intermediate(a, b):
     return f"{a_roman} - {b_roman} | {intermediate} | = {c_roman}"
 
 def generate_subtraction_full_steps(a, b):
-    """Show all intermediate steps inline"""
+    """Show all intermediate steps inline using the actual subtract_roman algorithm"""
     if a <= b:
         raise ValueError("Invalid subtraction: a must be > b")
 
     a_roman = int_to_roman_subtractive(a)
     b_roman = int_to_roman_subtractive(b)
 
+    # Convert to additive notation
     a_add = subtractive_to_additive(a_roman)
     b_add = subtractive_to_additive(b_roman)
 
-    # Get intermediate state (after eliminations)
-    a_temp = list(a_add)
-    b_temp = list(b_add)
-    for char in b_add:
-        if char in a_temp:
-            a_temp.remove(char)
-    intermediate = ''.join(a_temp)
+    # Perform the actual subtract_roman algorithm to get proper intermediate steps
+    a_chars = list(a_add)
+    b_chars = list(b_add)
 
-    result = subtract_roman(a_roman, b_roman)
+    # Elimination and expansion process (from subtract_roman)
+    while b_chars:
+        changed = False
+        for char in b_chars[:]:
+            if char in a_chars:
+                a_chars.remove(char)
+                b_chars.remove(char)
+                changed = True
+                break
 
-    return f"{a_roman} - {b_roman} | {a_add} {b_add} | {intermediate} | {result}"
+        if changed:
+            continue
+
+        if not b_chars:
+            break
+
+        b_largest = b_chars[0]
+        expansion_map = {
+            'M': 'DD', 'D': 'CCCCC', 'C': 'LL',
+            'L': 'XXXXX', 'X': 'VV', 'V': 'IIIII'
+        }
+        order = {'M': 0, 'D': 1, 'C': 2, 'L': 3, 'X': 4, 'V': 5, 'I': 6}
+        b_order = order[b_largest]
+
+        expanded = False
+        for i, a_char in enumerate(a_chars):
+            if order[a_char] < b_order:
+                if a_char in expansion_map:
+                    expansion = expansion_map[a_char]
+                    a_chars[i:i+1] = list(expansion)
+                    expanded = True
+                    break
+
+        if not expanded:
+            break
+
+    # Final conversion steps
+    after_elimination = ''.join(a_chars)
+    sorted_result = sort_roman(after_elimination)
+    reduced = reduce_roman(sorted_result)
+    final = additive_to_subtractive(reduced)
+
+    return f"{a_roman} - {b_roman} | {a_add} {b_add} | {sorted_result} | {reduced} | {final}"
 
 # ============================================================================
 # TOKENIZER
@@ -711,7 +748,7 @@ def main():
         dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
 
         # Training loop
-        best_acc = 0
+        best_loss = float('inf')
         print("Training...")
         for epoch in range(args.epochs):
             loss = train_epoch(model, dataloader, optimizer, device, tokenizer)
@@ -749,15 +786,16 @@ def main():
                 print(f"  Generated: {generated}")
                 print(f"  Expected: {expected}")
 
-                # Save best model
-                if acc > best_acc:
-                    best_acc = acc
+                # Save best model based on loss instead of accuracy
+                if loss < best_loss:
+                    best_loss = loss
                     checkpoint_path = checkpoint_dir / "best_model.pt"
                     best_metadata = metadata.copy()
                     best_metadata['epoch'] = epoch + 1
+                    best_metadata['loss'] = loss
                     best_metadata['accuracy'] = acc
                     save_checkpoint_with_metadata(model, checkpoint_path, best_metadata)
-                    print(f"New best! Saved to {checkpoint_path}")
+                    print(f"New best loss! Saved to {checkpoint_path}")
 
             # Save periodic checkpoints
             if (epoch + 1) % 50 == 0:
