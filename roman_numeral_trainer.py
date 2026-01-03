@@ -110,8 +110,18 @@ def additive_to_subtractive(roman):
 
     return roman
 
-def subtract_roman(a_roman, b_roman):
-    """Subtract b_roman from a_roman using the algorithm"""
+def subtract_roman(a_roman, b_roman, return_steps=False):
+    """Subtract b_roman from a_roman using the algorithm
+
+    Args:
+        a_roman: First Roman numeral (minuend)
+        b_roman: Second Roman numeral (subtrahend)
+        return_steps: If True, return a dict with intermediate steps
+
+    Returns:
+        If return_steps=False: final result string
+        If return_steps=True: dict with keys 'a_add', 'b_add', 'sorted', 'reduced', 'final'
+    """
     # Step 1: Convert to additive notation
     a_add = subtractive_to_additive(a_roman)
     b_add = subtractive_to_additive(b_roman)
@@ -121,6 +131,12 @@ def subtract_roman(a_roman, b_roman):
     b_chars = list(b_add)
 
     # Step 2 & 3: Eliminate common symbols and expand as needed
+    expansion_map = {
+        'M': 'DD', 'D': 'CCCCC', 'C': 'LL',
+        'L': 'XXXXX', 'X': 'VV', 'V': 'IIIII'
+    }
+    order = {'M': 0, 'D': 1, 'C': 2, 'L': 3, 'X': 4, 'V': 5, 'I': 6}
+
     while b_chars:
         # Try to eliminate common symbols
         changed = False
@@ -140,19 +156,6 @@ def subtract_roman(a_roman, b_roman):
 
         # Find the largest remaining symbol in B
         b_largest = b_chars[0]
-
-        # Find a larger symbol in A to expand
-        expansion_map = {
-            'M': 'DD',
-            'D': 'CCCCC',
-            'C': 'LL',
-            'L': 'XXXXX',
-            'X': 'VV',
-            'V': 'IIIII'
-        }
-
-        # Find first symbol in A larger than b_largest
-        order = {'M': 0, 'D': 1, 'C': 2, 'L': 3, 'X': 4, 'V': 5, 'I': 6}
         b_order = order[b_largest]
 
         expanded = False
@@ -170,44 +173,32 @@ def subtract_roman(a_roman, b_roman):
             break
 
     # Step 4: Convert result back to subtractive notation
-    result = ''.join(a_chars)
-    result = sort_roman(result)
-    result = reduce_roman(result)
-    result = additive_to_subtractive(result)
+    after_elimination = ''.join(a_chars)
+    sorted_result = sort_roman(after_elimination)
+    reduced = reduce_roman(sorted_result)
+    final = additive_to_subtractive(reduced)
 
-    return result
+    if return_steps:
+        return {
+            'a_add': a_add,
+            'b_add': b_add,
+            'sorted': sorted_result,
+            'reduced': reduced,
+            'final': final
+        }
+
+    return final
 
 # ============================================================================
-# GENERATE TRAINING EXAMPLES - ADDITION
+# GENERATE TRAINING EXAMPLES - ADDITION & SUBTRACTION
 # ============================================================================
 
-def generate_addition_ultra_simple(a, b):
-    """Simplest format: A + B = C"""
-    a_roman = int_to_roman_subtractive(a)
-    b_roman = int_to_roman_subtractive(b)
-    c_roman = int_to_roman_subtractive(a + b)
+def add_roman_steps(a_roman, b_roman):
+    """Helper to get addition intermediate steps
 
-    return f"{a_roman} + {b_roman} = {c_roman}"
-
-def generate_addition_with_intermediate(a, b):
-    """Show sorted concatenation: A + B | sorted | = C"""
-    a_roman = int_to_roman_subtractive(a)
-    b_roman = int_to_roman_subtractive(b)
-
-    a_add = subtractive_to_additive(a_roman)
-    b_add = subtractive_to_additive(b_roman)
-    concat = a_add + b_add
-    sorted_roman = sort_roman(concat)
-
-    c_roman = int_to_roman_subtractive(a + b)
-
-    return f"{a_roman} + {b_roman} | {sorted_roman} | = {c_roman}"
-
-def generate_addition_full_steps(a, b):
-    """Show all intermediate steps inline"""
-    a_roman = int_to_roman_subtractive(a)
-    b_roman = int_to_roman_subtractive(b)
-
+    Returns:
+        dict with keys 'a_add', 'b_add', 'sorted', 'reduced', 'final'
+    """
     a_add = subtractive_to_additive(a_roman)
     b_add = subtractive_to_additive(b_roman)
     concat = a_add + b_add
@@ -215,107 +206,91 @@ def generate_addition_full_steps(a, b):
     reduced = reduce_roman(sorted_roman)
     final = additive_to_subtractive(reduced)
 
-    return f"{a_roman} + {b_roman} | {a_add} {b_add} | {sorted_roman} | {reduced} | {final}"
+    return {
+        'a_add': a_add,
+        'b_add': b_add,
+        'sorted': sorted_roman,
+        'reduced': reduced,
+        'final': final
+    }
 
-# ============================================================================
-# GENERATE TRAINING EXAMPLES - SUBTRACTION
-# ============================================================================
+def generate_operation(a, b, operation='add', format='simple'):
+    """Generate training example for addition or subtraction
+
+    Args:
+        a, b: integers for operation
+        operation: 'add' or 'subtract'
+        format: 'simple', 'intermediate', or 'full'
+
+    Returns:
+        Formatted training string
+    """
+    if operation == 'subtract' and a <= b:
+        raise ValueError("Invalid subtraction: a must be > b")
+
+    a_roman = int_to_roman_subtractive(a)
+    b_roman = int_to_roman_subtractive(b)
+    op_symbol = '+' if operation == 'add' else '-'
+
+    if format == 'simple':
+        # Simplest format: A op B = C
+        result_int = a + b if operation == 'add' else a - b
+        result_roman = int_to_roman_subtractive(result_int)
+        return f"{a_roman} {op_symbol} {b_roman} = {result_roman}"
+
+    elif format == 'intermediate':
+        # Show one key intermediate step
+        if operation == 'add':
+            steps = add_roman_steps(a_roman, b_roman)
+            return f"{a_roman} + {b_roman} | {steps['sorted']} | = {steps['final']}"
+        else:
+            # For subtraction, show state after eliminations
+            a_add = subtractive_to_additive(a_roman)
+            b_add = subtractive_to_additive(b_roman)
+            a_temp = list(a_add)
+            for char in b_add:
+                if char in a_temp:
+                    a_temp.remove(char)
+            intermediate = ''.join(a_temp)
+            result_roman = int_to_roman_subtractive(a - b)
+            return f"{a_roman} - {b_roman} | {intermediate} | = {result_roman}"
+
+    elif format == 'full':
+        # Show all intermediate steps
+        if operation == 'add':
+            steps = add_roman_steps(a_roman, b_roman)
+            return f"{a_roman} + {b_roman} | {steps['a_add']} {steps['b_add']} | {steps['sorted']} | {steps['reduced']} | {steps['final']}"
+        else:
+            steps = subtract_roman(a_roman, b_roman, return_steps=True)
+            return f"{a_roman} - {b_roman} | {steps['a_add']} {steps['b_add']} | {steps['sorted']} | {steps['reduced']} | {steps['final']}"
+
+    else:
+        raise ValueError(f"Unknown format: {format}")
+
+# Legacy function wrappers for backwards compatibility
+def generate_addition_ultra_simple(a, b):
+    """Simplest format: A + B = C"""
+    return generate_operation(a, b, operation='add', format='simple')
+
+def generate_addition_with_intermediate(a, b):
+    """Show sorted concatenation: A + B | sorted | = C"""
+    return generate_operation(a, b, operation='add', format='intermediate')
+
+def generate_addition_full_steps(a, b):
+    """Show all intermediate steps inline"""
+    return generate_operation(a, b, operation='add', format='full')
 
 def generate_subtraction_ultra_simple(a, b):
     """Simplest format: A - B = C"""
-    if a <= b:
-        # Skip invalid subtractions (would give zero or negative)
-        raise ValueError("Invalid subtraction: a must be > b")
-
-    a_roman = int_to_roman_subtractive(a)
-    b_roman = int_to_roman_subtractive(b)
-    c_roman = int_to_roman_subtractive(a - b)
-
-    return f"{a_roman} - {b_roman} = {c_roman}"
+    return generate_operation(a, b, operation='subtract', format='simple')
 
 def generate_subtraction_with_intermediate(a, b):
     """Show intermediate steps: A - B | after_eliminations | = C"""
-    if a <= b:
-        raise ValueError("Invalid subtraction: a must be > b")
-
-    a_roman = int_to_roman_subtractive(a)
-    b_roman = int_to_roman_subtractive(b)
-
-    # Show the state after eliminating common symbols
-    a_add = subtractive_to_additive(a_roman)
-    b_add = subtractive_to_additive(b_roman)
-
-    # Simulate elimination for display
-    a_temp = list(a_add)
-    b_temp = list(b_add)
-    for char in b_add:
-        if char in a_temp:
-            a_temp.remove(char)
-    intermediate = ''.join(a_temp)
-
-    c_roman = int_to_roman_subtractive(a - b)
-
-    return f"{a_roman} - {b_roman} | {intermediate} | = {c_roman}"
+    return generate_operation(a, b, operation='subtract', format='intermediate')
 
 def generate_subtraction_full_steps(a, b):
-    """Show all intermediate steps inline using the actual subtract_roman algorithm"""
-    if a <= b:
-        raise ValueError("Invalid subtraction: a must be > b")
-
-    a_roman = int_to_roman_subtractive(a)
-    b_roman = int_to_roman_subtractive(b)
-
-    # Convert to additive notation
-    a_add = subtractive_to_additive(a_roman)
-    b_add = subtractive_to_additive(b_roman)
-
-    # Perform the actual subtract_roman algorithm to get proper intermediate steps
-    a_chars = list(a_add)
-    b_chars = list(b_add)
-
-    # Elimination and expansion process (from subtract_roman)
-    while b_chars:
-        changed = False
-        for char in b_chars[:]:
-            if char in a_chars:
-                a_chars.remove(char)
-                b_chars.remove(char)
-                changed = True
-                break
-
-        if changed:
-            continue
-
-        if not b_chars:
-            break
-
-        b_largest = b_chars[0]
-        expansion_map = {
-            'M': 'DD', 'D': 'CCCCC', 'C': 'LL',
-            'L': 'XXXXX', 'X': 'VV', 'V': 'IIIII'
-        }
-        order = {'M': 0, 'D': 1, 'C': 2, 'L': 3, 'X': 4, 'V': 5, 'I': 6}
-        b_order = order[b_largest]
-
-        expanded = False
-        for i, a_char in enumerate(a_chars):
-            if order[a_char] < b_order:
-                if a_char in expansion_map:
-                    expansion = expansion_map[a_char]
-                    a_chars[i:i+1] = list(expansion)
-                    expanded = True
-                    break
-
-        if not expanded:
-            break
-
-    # Final conversion steps
-    after_elimination = ''.join(a_chars)
-    sorted_result = sort_roman(after_elimination)
-    reduced = reduce_roman(sorted_result)
-    final = additive_to_subtractive(reduced)
-
-    return f"{a_roman} - {b_roman} | {a_add} {b_add} | {sorted_result} | {reduced} | {final}"
+    """Show all intermediate steps inline"""
+    return generate_operation(a, b, operation='subtract', format='full')
 
 # ============================================================================
 # TOKENIZER
@@ -472,28 +447,20 @@ def generate_text(model, prompt, tokenizer, device, max_new_tokens=100):
 
     return tokenizer.decode(input_tensor[0].cpu().tolist())
 
-def evaluate_accuracy(model, tokenizer, device, num_tests=50, min_val=1, max_val=50):
-    """Evaluate model accuracy on addition"""
-    correct = 0
+def evaluate_operation_accuracy(model, tokenizer, device, operation='add', num_tests=50, min_val=1, max_val=50):
+    """Evaluate model accuracy on addition or subtraction
 
-    for _ in range(num_tests):
-        a = random.randint(min_val, max_val)
-        b = random.randint(min_val, max_val)
+    Args:
+        model: The model to evaluate
+        tokenizer: Tokenizer instance
+        device: Torch device
+        operation: 'add' or 'subtract'
+        num_tests: Number of test cases
+        min_val, max_val: Range for random test values
 
-        a_roman = int_to_roman_subtractive(a)
-        b_roman = int_to_roman_subtractive(b)
-        expected = int_to_roman_subtractive(a + b)
-
-        prompt = f"{a_roman} + {b_roman} |"
-        generated = generate_text(model, prompt, tokenizer, device)
-
-        if expected in generated:
-            correct += 1
-
-    return correct / num_tests
-
-def evaluate_subtraction_accuracy(model, tokenizer, device, num_tests=50, min_val=1, max_val=50):
-    """Evaluate model accuracy on subtraction"""
+    Returns:
+        Accuracy as a float between 0 and 1
+    """
     correct = 0
     tested = 0
 
@@ -501,21 +468,26 @@ def evaluate_subtraction_accuracy(model, tokenizer, device, num_tests=50, min_va
         a = random.randint(min_val, max_val)
         b = random.randint(min_val, max_val)
 
-        # Ensure a > b for valid subtraction (must be strictly greater)
-        if a <= b:
-            a, b = b, a
-
-        # Skip if still equal (can happen with small ranges)
-        if a == b:
-            continue
+        # For subtraction, ensure a > b
+        if operation == 'subtract':
+            if a <= b:
+                a, b = b, a
+            # Skip if still equal (can happen with small ranges)
+            if a == b:
+                continue
 
         tested += 1
 
         a_roman = int_to_roman_subtractive(a)
         b_roman = int_to_roman_subtractive(b)
-        expected = int_to_roman_subtractive(a - b)
 
-        prompt = f"{a_roman} - {b_roman} |"
+        if operation == 'add':
+            expected = int_to_roman_subtractive(a + b)
+            prompt = f"{a_roman} + {b_roman} |"
+        else:  # subtract
+            expected = int_to_roman_subtractive(a - b)
+            prompt = f"{a_roman} - {b_roman} |"
+
         generated = generate_text(model, prompt, tokenizer, device)
 
         if expected in generated:
@@ -523,45 +495,16 @@ def evaluate_subtraction_accuracy(model, tokenizer, device, num_tests=50, min_va
 
     return correct / num_tests
 
-# ============================================================================
-# CURRICULUM LEARNING
-# ============================================================================
+# Legacy function wrappers for backwards compatibility
+def evaluate_accuracy(model, tokenizer, device, num_tests=50, min_val=1, max_val=50):
+    """Evaluate model accuracy on addition"""
+    return evaluate_operation_accuracy(model, tokenizer, device, operation='add',
+                                      num_tests=num_tests, min_val=min_val, max_val=max_val)
 
-def generate_curriculum_data(stage, examples_per_stage, add_fn, sub_fn):
-    """Generate data with increasing difficulty (mixed operations)"""
-    curricula = {
-        1: (1, 5),      # Very small numbers
-        2: (1, 10),     # Small numbers
-        3: (5, 20),     # Small to medium
-        4: (10, 30),    # Medium
-        5: (10, 50),    # Medium to large
-        6: (20, 100),   # Large
-        7: (50, 200),   # Very large
-    }
-
-    min_val, max_val = curricula.get(stage, (1, 50))
-    examples = []
-
-    for _ in range(examples_per_stage):
-        a = random.randint(min_val, max_val)
-        b = random.randint(min_val, max_val)
-
-        try:
-            # Randomly choose addition or subtraction
-            if random.random() < 0.5:
-                example = add_fn(a, b)
-            else:
-                # For subtraction, ensure a > b
-                if a > b:
-                    example = sub_fn(a, b)
-                else:
-                    example = sub_fn(b, a)
-            examples.append(example)
-        except ValueError:
-            # Skip if result out of range
-            continue
-
-    return examples
+def evaluate_subtraction_accuracy(model, tokenizer, device, num_tests=50, min_val=1, max_val=50):
+    """Evaluate model accuracy on subtraction"""
+    return evaluate_operation_accuracy(model, tokenizer, device, operation='subtract',
+                                      num_tests=num_tests, min_val=min_val, max_val=max_val)
 
 # ============================================================================
 # METADATA MANAGEMENT
@@ -589,7 +532,6 @@ def main():
     parser.add_argument('--nhead', type=int, default=8, help='Number of attention heads')
     parser.add_argument('--num-layers', type=int, default=8, help='Number of transformer layers')
     parser.add_argument('--dim-feedforward', type=int, default=2048, help='FFN dimension')
-    parser.add_argument('--curriculum', action='store_true', help='Use curriculum learning')
     parser.add_argument('--epochs', type=int, default=300, help='Total epochs')
     parser.add_argument('--batch-size', type=int, default=32, help='Batch size')
     parser.add_argument('--lr', type=float, default=5e-5, help='Learning rate')
@@ -601,7 +543,6 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
     print(f"Format: {args.format}")
-    print(f"Curriculum learning: {args.curriculum}")
     print(f"Model size: d_model={args.d_model}, layers={args.num_layers}, heads={args.nhead}")
     print()
 
@@ -654,7 +595,6 @@ def main():
         },
         'training_config': {
             'format': args.format,
-            'curriculum': args.curriculum,
             'batch_size': args.batch_size,
             'learning_rate': args.lr,
             'epochs': args.epochs,
@@ -667,143 +607,103 @@ def main():
     # Optimizer with warmup
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
 
-    if args.curriculum:
-        print("="*60)
-        print("CURRICULUM TRAINING")
-        print("="*60)
 
-        # Train through curriculum stages
-        for stage in range(1, 8):
-            print(f"\n--- Stage {stage}/7 ---")
+    print("="*60)
+    print("STANDARD TRAINING")
+    print("="*60)
 
-            # Generate curriculum data
-            examples = generate_curriculum_data(stage, args.examples // 7, add_fn, sub_fn)
-            print(f"Generated {len(examples)} examples")
-            if examples:
-                add_examples = [ex for ex in examples if ' + ' in ex]
-                sub_examples = [ex for ex in examples if ' - ' in ex]
-                if add_examples:
-                    print(f"Addition example: {add_examples[0]}")
-                if sub_examples:
-                    print(f"Subtraction example: {sub_examples[0]}")
+    # Generate all training data (50% addition, 50% subtraction)
+    print(f"\nGenerating {args.examples} training examples (mixed operations)...")
+    train_examples = []
+    iter = 0
+    while iter < (args.examples // 2):
+        
+        #for _ in range(args.examples):
+        a = random.randint(1, 3999)
+        b = random.randint(1, 3999)
+            
+        # Max Roman numeral is 3999
+        if (a + b) < 4000: 
+            example = add_fn(a, b)    
+            train_examples.append(example)
+            iter = iter + 1
 
-            # Create dataset
-            dataset = RomanDataset(examples, tokenizer)
-            dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
+    iter = 0
+    while iter < (args.examples // 2):        
+        a = random.randint(1, 3999)
+        b = random.randint(1, 3999)
+        # For subtraction, ensure a > b
+        if a > b:
+            example = sub_fn(a, b)
+            train_examples.append(example)
+            iter = iter + 1
+        
+    print(f"Generated {len(train_examples)} examples")
+    print(f"Addition example: {[ex for ex in train_examples if ' + ' in ex][0]}")
+    print(f"Subtraction example: {[ex for ex in train_examples if ' - ' in ex][0]}")
+    print()
 
-            # Train for fewer epochs per stage
-            epochs_per_stage = args.epochs // 7
-            for epoch in range(epochs_per_stage):
-                loss = train_epoch(model, dataloader, optimizer, device, tokenizer)
+    # Create dataset
+    dataset = RomanDataset(train_examples, tokenizer)
+    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
 
-                if (epoch + 1) % 10 == 0:
-                    print(f"  Epoch {epoch+1}/{epochs_per_stage}: Loss = {loss:.4f}")
+    # Training loop
+    best_loss = float('inf')
+    print("Training...")
+    for epoch in range(args.epochs):
+        loss = train_epoch(model, dataloader, optimizer, device, tokenizer)
 
-                    # Quick test on both operations
-                    add_acc = evaluate_accuracy(model, tokenizer, device, num_tests=10)
-                    sub_acc = evaluate_subtraction_accuracy(model, tokenizer, device, num_tests=10)
-                    print(f"  Addition: {add_acc:.2%}, Subtraction: {sub_acc:.2%}")
+        if (epoch + 1) % 10 == 0:
+            print(f"\nEpoch {epoch+1}/{args.epochs}: Loss = {loss:.4f}")
 
-            # Save checkpoint after each stage
-            checkpoint_path = checkpoint_dir / f"curriculum_stage_{stage}.pt"
-            stage_metadata = metadata.copy()
-            stage_metadata['curriculum_stage'] = stage
-            save_checkpoint_with_metadata(model, checkpoint_path, stage_metadata)
-            print(f"Saved checkpoint: {checkpoint_path}")
+            # Evaluate both operations
+            add_acc = evaluate_accuracy(model, tokenizer, device, num_tests=50)
+            sub_acc = evaluate_subtraction_accuracy(model, tokenizer, device, num_tests=50)
+            acc = (add_acc + sub_acc) / 2  # Average accuracy
+            print(f"Addition accuracy: {add_acc:.2%}")
+            print(f"Subtraction accuracy: {sub_acc:.2%}")
+            print(f"Overall accuracy: {acc:.2%}")
 
-    else:
-        print("="*60)
-        print("STANDARD TRAINING")
-        print("="*60)
+            # Show addition sample
+            test_a = random.randint(1, 2000)
+            test_b = random.randint(1, 1999)
+            test_prompt = f"{int_to_roman_subtractive(test_a)} + {int_to_roman_subtractive(test_b)} |"
+            generated = generate_text(model, test_prompt, tokenizer, device)
+            expected = int_to_roman_subtractive(test_a + test_b)
+            print(f"Addition sample: {test_a} + {test_b} = {test_a + test_b}")
+            print(f"  Prompt: {test_prompt}")
+            print(f"  Generated: {generated}")
+            print(f"  Expected: {expected}")
 
-        # Generate all training data (50% addition, 50% subtraction)
-        print(f"\nGenerating {args.examples} training examples (mixed operations)...")
-        train_examples = []
+            # Show subtraction sample
+            numbers = random.sample(range(1, 4000), 2)
+            test_a, test_b = max(numbers), min(numbers) 
+            test_prompt = f"{int_to_roman_subtractive(test_a)} - {int_to_roman_subtractive(test_b)} |"
+            generated = generate_text(model, test_prompt, tokenizer, device)
+            expected = int_to_roman_subtractive(test_a - test_b)
+            print(f"Subtraction sample: {test_a} - {test_b} = {test_a - test_b}")
+            print(f"  Prompt: {test_prompt}")
+            print(f"  Generated: {generated}")
+            print(f"  Expected: {expected}")
 
-        for _ in range(args.examples):
-            a = random.randint(1, 1500)
-            b = random.randint(1, 1500)
+            # Save best model based on loss instead of accuracy
+            if loss < best_loss:
+                best_loss = loss
+                checkpoint_path = checkpoint_dir / "best_model.pt"
+                best_metadata = metadata.copy()
+                best_metadata['epoch'] = epoch + 1
+                best_metadata['loss'] = loss
+                best_metadata['accuracy'] = acc
+                save_checkpoint_with_metadata(model, checkpoint_path, best_metadata)
+                print(f"New best loss! Saved to {checkpoint_path}")
 
-            try:
-                # Randomly choose addition or subtraction
-                if random.random() < 0.5:
-                    example = add_fn(a, b)
-                else:
-                    # For subtraction, ensure a > b
-                    if a > b:
-                        example = sub_fn(a, b)
-                    else:
-                        example = sub_fn(b, a)
-                train_examples.append(example)
-            except ValueError:
-                continue
-
-        print(f"Generated {len(train_examples)} examples")
-        print(f"Addition example: {[ex for ex in train_examples if ' + ' in ex][0]}")
-        print(f"Subtraction example: {[ex for ex in train_examples if ' - ' in ex][0]}")
-        print()
-
-        # Create dataset
-        dataset = RomanDataset(train_examples, tokenizer)
-        dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
-
-        # Training loop
-        best_loss = float('inf')
-        print("Training...")
-        for epoch in range(args.epochs):
-            loss = train_epoch(model, dataloader, optimizer, device, tokenizer)
-
-            if (epoch + 1) % 10 == 0:
-                print(f"\nEpoch {epoch+1}/{args.epochs}: Loss = {loss:.4f}")
-
-                # Evaluate both operations
-                add_acc = evaluate_accuracy(model, tokenizer, device, num_tests=50)
-                sub_acc = evaluate_subtraction_accuracy(model, tokenizer, device, num_tests=50)
-                acc = (add_acc + sub_acc) / 2  # Average accuracy
-                print(f"Addition accuracy: {add_acc:.2%}")
-                print(f"Subtraction accuracy: {sub_acc:.2%}")
-                print(f"Overall accuracy: {acc:.2%}")
-
-                # Show addition sample
-                test_a = random.randint(1, 100)
-                test_b = random.randint(1, 100)
-                test_prompt = f"{int_to_roman_subtractive(test_a)} + {int_to_roman_subtractive(test_b)} |"
-                generated = generate_text(model, test_prompt, tokenizer, device)
-                expected = int_to_roman_subtractive(test_a + test_b)
-                print(f"Addition sample: {test_a} + {test_b} = {test_a + test_b}")
-                print(f"  Prompt: {test_prompt}")
-                print(f"  Generated: {generated}")
-                print(f"  Expected: {expected}")
-
-                # Show subtraction sample
-                test_a = random.randint(50, 100)
-                test_b = random.randint(1, 49)
-                test_prompt = f"{int_to_roman_subtractive(test_a)} - {int_to_roman_subtractive(test_b)} |"
-                generated = generate_text(model, test_prompt, tokenizer, device)
-                expected = int_to_roman_subtractive(test_a - test_b)
-                print(f"Subtraction sample: {test_a} - {test_b} = {test_a - test_b}")
-                print(f"  Prompt: {test_prompt}")
-                print(f"  Generated: {generated}")
-                print(f"  Expected: {expected}")
-
-                # Save best model based on loss instead of accuracy
-                if loss < best_loss:
-                    best_loss = loss
-                    checkpoint_path = checkpoint_dir / "best_model.pt"
-                    best_metadata = metadata.copy()
-                    best_metadata['epoch'] = epoch + 1
-                    best_metadata['loss'] = loss
-                    best_metadata['accuracy'] = acc
-                    save_checkpoint_with_metadata(model, checkpoint_path, best_metadata)
-                    print(f"New best loss! Saved to {checkpoint_path}")
-
-            # Save periodic checkpoints
-            if (epoch + 1) % 50 == 0:
-                checkpoint_path = checkpoint_dir / f"checkpoint_epoch_{epoch+1}.pt"
-                epoch_metadata = metadata.copy()
-                epoch_metadata['epoch'] = epoch + 1
-                save_checkpoint_with_metadata(model, checkpoint_path, epoch_metadata)
-                print(f"Checkpoint saved: {checkpoint_path}")
+        # Save periodic checkpoints
+        if (epoch + 1) % 50 == 0:
+            checkpoint_path = checkpoint_dir / f"checkpoint_epoch_{epoch+1}.pt"
+            epoch_metadata = metadata.copy()
+            epoch_metadata['epoch'] = epoch + 1
+            save_checkpoint_with_metadata(model, checkpoint_path, epoch_metadata)
+            print(f"Checkpoint saved: {checkpoint_path}")
 
     # Final save
     final_path = checkpoint_dir / "final_model.pt"
